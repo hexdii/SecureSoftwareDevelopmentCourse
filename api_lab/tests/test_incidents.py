@@ -46,3 +46,30 @@ class IncidentV1Tests(IncidentBase):
         res = self.bob.get(f'/api/v1/incidents/{self.alice_incident.pk}/')
         self.assertEqual(res.status_code, 200)  # VULNERABLE: debería ser 404
         self.assertEqual(res.json()['owner'], 'alice')
+
+
+class IncidentV2Tests(IncidentBase):
+    """Verifica la corrección: autorización a nivel de objeto."""
+
+    def test_v2_requires_authentication(self):
+        self.assertEqual(self.anon.get('/api/v2/incidents/').status_code, 401)
+
+    def test_v2_owner_reads_own_incident(self):
+        res = self.alice.get(f'/api/v2/incidents/{self.alice_incident.pk}/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()['title'], 'Secreto de alice')
+
+    def test_v2_bola_blocked_with_404(self):
+        res = self.bob.get(f'/api/v2/incidents/{self.alice_incident.pk}/')
+        self.assertEqual(res.status_code, 404)
+        self.assertNotIn('Secreto de alice', res.content.decode())
+
+    def test_v2_nonexistent_and_foreign_are_indistinguishable(self):
+        foreign = self.bob.get(f'/api/v2/incidents/{self.alice_incident.pk}/')
+        missing = self.bob.get('/api/v2/incidents/99999/')
+        self.assertEqual(foreign.status_code, missing.status_code)
+        self.assertEqual(foreign.json(), missing.json())
+
+    def test_v2_list_only_shows_own_incidents(self):
+        ids = [i['id'] for i in self.bob.get('/api/v2/incidents/').json()]
+        self.assertEqual(ids, [self.bob_incident.pk])
