@@ -22,7 +22,6 @@ class SystemInfoBase(TestCase):
         client.credentials(HTTP_AUTHORIZATION=f'Token {token.key}')
         return client
 
-
 @override_settings(ENABLE_VULNERABLE_API=True)
 class SystemInfoV1Tests(SystemInfoBase):
     """Documenta la vulnerabilidad: v1 autentica pero no autoriza."""
@@ -35,3 +34,22 @@ class SystemInfoV1Tests(SystemInfoBase):
         self.assertEqual(res.status_code, 200)  # VULNERABLE: debería ser 403
         staff = [u['username'] for u in res.json()['users']['staff']]
         self.assertIn('profe', staff)
+
+class SystemInfoV2Tests(SystemInfoBase):
+    """Verifica la corrección: autenticación + autorización por rol."""
+
+    def test_v2_requires_authentication(self):
+        self.assertEqual(self.anon.get(V2).status_code, 401)
+
+    def test_v2_regular_user_forbidden(self):
+        self.assertEqual(self.bob.get(V2).status_code, 403)
+
+    def test_v2_admin_allowed(self):
+        res = self.profe.get(V2)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn('installed_apps', res.json())
+
+    def test_v2_never_exposes_secrets_even_to_admin(self):
+        body = self.profe.get(V2).json()
+        self.assertNotIn('secret_key', body)
+        self.assertNotIn('environment_variables', body)
